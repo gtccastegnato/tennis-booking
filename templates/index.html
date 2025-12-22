@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <title>Prenotazione Campo Tennis</title>
-    <script src="https://js.stripe.com/v3/"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        button { padding: 10px; margin: 5px; cursor: pointer; }
-        .slot { margin: 5px 0; }
-    </style>
+<meta charset="UTF-8">
+<title>Prenotazione Campo Tennis</title>
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    button { padding: 10px; margin: 5px; cursor: pointer; }
+    .slot { margin: 5px 0; }
+    .selected { background-color: #4CAF50; color: white; }
+</style>
 </head>
 <body>
 
@@ -51,9 +52,11 @@ async function loadSlots() {
     slots.forEach(slot => {
         const btn = document.createElement("button");
         btn.innerText = slot;
+        btn.className = "slot";
         btn.onclick = () => {
             selectedSlot = slot;
-            alert("Slot selezionato: " + slot);
+            document.querySelectorAll(".slot").forEach(b => b.classList.remove("selected"));
+            btn.classList.add("selected");
         };
         container.appendChild(btn);
     });
@@ -109,9 +112,7 @@ async function pagaCaparra() {
 
     const result = await stripe.confirmPayment({
         clientSecret: data.client_secret,
-        confirmParams: {
-            return_url: window.location.origin
-        }
+        confirmParams: { return_url: window.location.origin }
     });
 
     if (result.error) {
