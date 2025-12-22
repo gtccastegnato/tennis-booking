@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prenotazione Campo Tennis</title>
+<style>
+body { font-family: Arial, sans-serif; margin:20px; }
+button { margin:5px; padding:10px; cursor:pointer; }
+#slots button.selected { background-color: #4CAF50; color:white; }
+</style>
+</head>
+<body>
+
+<h1>Prenotazione Campo Tennis</h1>
+
+<label>Seleziona Data: <input type="date" id="date"></label><br><br>
+
+<div id="slots">Seleziona una data per vedere gli slot disponibili</div>
+
+<br>
+<label>Nome: <input type="text" id="name"></label><br>
+<label>Telefono: <input type="text" id="phone"></label><br>
+<label>Email: <input type="email" id="email"></label><br><br>
+
+<button onclick="start()">Paga caparra 10€</button>
+
+<script>
+let selectedTime = null;
+const slotsDiv = document.getElementById("slots");
+const dateInput = document.getElementById("date");
+const nameInput = document.getElementById("name");
+const phoneInput = document.getElementById("phone");
+const emailInput = document.getElementById("email");
+
+function generateSlots() {
+    const date = dateInput.value;
+    if(!date){
+        slotsDiv.innerText = "Seleziona prima una data";
+        return;
+    }
+
+    fetch(`/slots?date=${date}`)
+    .then(r=>r.json())
+    .then(slots=>{
+        slotsDiv.innerHTML = "";
+        if(slots.length===0){
+            slotsDiv.innerText = "Nessuno slot disponibile per questa data.";
+            return;
+        }
+        slots.forEach(h=>{
+            let b = document.createElement("button");
+            b.innerText = h;
+            b.onclick = ()=>{
+                selectedTime = h;
+                document.querySelectorAll("#slots button").forEach(btn=>btn.classList.remove("selected"));
+                b.classList.add("selected");
+            };
+            slotsDiv.appendChild(b);
+        });
+    })
+    .catch(err=>{
+        slotsDiv.innerText = "Errore nel caricare gli slot.";
+        console.error(err);
+    });
+}
+
+dateInput.addEventListener("change", generateSlots);
+
+function start(){
+    if(!selectedTime){
+        alert("Seleziona prima uno slot!");
+        return;
+    }
+    if(!nameInput.value || !phoneInput.value || !emailInput.value){
+        alert("Compila tutti i campi!");
+        return;
+    }
+
+    const dataToSend = {
+        date: dateInput.value,
+        time: selectedTime,
+        name: nameInput.value,
+        phone: phoneInput.value,
+        email: emailInput.value
+    };
+
+    fetch("/reserve", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(dataToSend)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if(d.error){
+            alert(d.error);
+            generateSlots();
+            return;
+        }
+        fetch("/webhook", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({booking_id: d.booking_id})
+        })
+        .then(()=> {
+            alert("Prenotazione e pagamento simulati!");
+            generateSlots();
+        })
+        .catch(err => alert("Errore nel simulare pagamento: " + err));
+    })
+    .catch(err => alert("Errore nella prenotazione: " + err));
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Prenotazioni</title>
+<style>
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background-color: #f2f2f2; }
+.paid { color: green; font-weight: bold; }
+.unpaid { color: red; font-weight: bold; }
+button { padding: 5px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h1>Pagina Admin - Prenotazioni Campo Tennis</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Data</th>
+            <th>Ora</th>
+            <th>Nome</th>
+            <th>Telefono</th>
+            <th>Email</th>
+            <th>Stato Pagamento</th>
+            <th>Azioni</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for b in bookings %}
+        <tr id="booking-{{ b[0] }}">
+            <td>{{ b[0] }}</td>
+            <td>{{ b[1] }}</td>
+            <td>{{ b[2] }}</td>
+            <td>{{ b[3] }}</td>
+            <td>{{ b[4] }}</td>
+            <td>{{ b[5] }}</td>
+            <td class="{{ 'paid' if b[6]==1 else 'unpaid' }}">{{ 'Pagato' if b[6]==1 else 'Non pagato' }}</td>
+            <td><button onclick="deleteBooking({{ b[0] }})">Cancella</button></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<script>
+function deleteBooking(booking_id){
+    if(!confirm("Sei sicuro di voler cancellare questa prenotazione?")) return;
+
+    fetch("/delete_booking", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({booking_id: booking_id})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if(d.success){
+            const row = document.getElementById(`booking-${booking_id}`);
+            if(row) row.remove();
+        } else if(d.error){
+            alert("Errore: " + d.error);
+        }
+    })
+    .catch(err => alert("Errore: " + err));
+}
+</script>
+
+</body>
+</html>
