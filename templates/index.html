@@ -6,33 +6,41 @@
 <script src="https://js.stripe.com/v3/"></script>
 <style>
     body { font-family: Arial, sans-serif; margin: 40px; }
-    button { padding: 10px; margin: 5px; cursor: pointer; }
-    .slot { margin: 5px 0; }
-    .selected { background-color: #4CAF50; color: white; }
+    .slots-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    button.slot { padding: 12px 20px; cursor: pointer; border: 1px solid #333; border-radius: 6px; background-color: #f1f1f1; transition: 0.2s; }
+    button.slot:hover { background-color: #ddd; }
+    button.slot.selected { background-color: #4CAF50; color: white; border: 1px solid #4CAF50; }
+    @media (max-width: 600px) {
+        .slots-container { flex-direction: column; }
+        button.slot { width: 100%; }
+    }
+    input, button { margin-top: 5px; margin-bottom: 10px; padding: 8px; font-size: 16px; }
 </style>
 </head>
 <body>
 
 <h1>Prenota il campo da tennis</h1>
 
-<label>Data:</label>
-<input type="date" id="date" onchange="loadSlots()">
+<label>Seleziona data:</label>
+<input type="date" id="date">
 
-<div id="slots"></div>
+<div id="slots" class="slots-container"></div>
 
 <hr>
 
 <h2>Dati prenotazione</h2>
-<input type="text" id="name" placeholder="Nome"><br>
-<input type="text" id="phone" placeholder="Telefono"><br>
-<input type="email" id="email" placeholder="Email"><br>
+<input type="text" id="name" placeholder="Nome">
+<input type="text" id="phone" placeholder="Telefono">
+<input type="email" id="email" placeholder="Email">
 
-<button onclick="prenota()">Prenota</button>
+<button id="prenotaBtn">Prenota e Paga Caparra</button>
 
 <script>
 const stripe = Stripe("{{ STRIPE_PUBLISHABLE_KEY }}");
 let selectedSlot = null;
 let bookingId = null;
+
+document.getElementById("date").addEventListener("change", loadSlots);
 
 async function loadSlots() {
     const date = document.getElementById("date").value;
@@ -42,27 +50,27 @@ async function loadSlots() {
     const slots = await res.json();
 
     const container = document.getElementById("slots");
-    container.innerHTML = "<h3>Slot disponibili</h3>";
+    container.innerHTML = "";
 
     if (slots.length === 0) {
-        container.innerHTML += "<p>Nessuno slot disponibile</p>";
+        container.innerHTML = "<p>Nessuno slot disponibile</p>";
         return;
     }
 
     slots.forEach(slot => {
         const btn = document.createElement("button");
-        btn.innerText = slot;
+        btn.textContent = slot;
         btn.className = "slot";
-        btn.onclick = () => {
+        btn.addEventListener("click", () => {
             selectedSlot = slot;
             document.querySelectorAll(".slot").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
-        };
+        });
         container.appendChild(btn);
     });
 }
 
-async function prenota() {
+document.getElementById("prenotaBtn").addEventListener("click", async () => {
     const date = document.getElementById("date").value;
     const name = document.getElementById("name").value;
     const phone = document.getElementById("phone").value;
@@ -76,49 +84,32 @@ async function prenota() {
     const res = await fetch("/reserve", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            date: date,
-            time: selectedSlot,
-            name: name,
-            phone: phone,
-            email: email
-        })
+        body: JSON.stringify({ date, time: selectedSlot, name, phone, email })
     });
 
     const data = await res.json();
-
-    if (data.error) {
-        alert(data.error);
-        return;
-    }
+    if (data.error) { alert(data.error); return; }
 
     bookingId = data.booking_id;
-    pagaCaparra();
-}
 
-async function pagaCaparra() {
-    const res = await fetch("/create-payment-intent", {
+    const paymentRes = await fetch("/create-payment-intent", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ booking_id: bookingId })
     });
 
-    const data = await res.json();
-
-    if (data.error) {
-        alert(data.error);
-        return;
-    }
+    const paymentData = await paymentRes.json();
+    if (paymentData.error) { alert(paymentData.error); return; }
 
     const result = await stripe.confirmPayment({
-        clientSecret: data.client_secret,
+        clientSecret: paymentData.client_secret,
         confirmParams: { return_url: window.location.origin }
     });
 
     if (result.error) {
         alert(result.error.message);
     }
-}
+});
 </script>
 
 </body>
