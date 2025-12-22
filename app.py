@@ -50,6 +50,13 @@ def get_slots():
         return jsonify([])
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+
+    # Limite prenotazioni 1 aprile - 31 luglio 2026
+    inizio = datetime(2026, 4, 1)
+    fine = datetime(2026, 7, 31)
+    if date_obj < inizio or date_obj > fine:
+        return jsonify([])
+
     weekday = date_obj.weekday()  # 0=lunedì, 6=domenica
 
     slots = []
@@ -90,6 +97,11 @@ def reserve():
 
     if not all([date, time, name, phone, email]):
         return jsonify({"error": "Compila tutti i campi"}), 400
+
+    # Limite prenotazioni 1 aprile - 31 luglio 2026
+    date_obj = datetime.strptime(date, "%Y-%m-%d")
+    if date_obj < datetime(2026, 4, 1) or date_obj > datetime(2026, 7, 31):
+        return jsonify({"error": "Prenotazioni disponibili solo dal 01/04/2026 al 31/07/2026"}), 400
 
     db = get_db()
     cur = db.cursor()
