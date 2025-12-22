@@ -59,31 +59,41 @@ document.getElementById("prenotaBtn").addEventListener("click", async () => {
     const name = document.getElementById("name").value;
     const phone = document.getElementById("phone").value;
     const email = document.getElementById("email").value;
-    if (!date || !selectedSlot || !name || !phone || !email) { alert("Compila tutti i campi e seleziona uno slot"); return; }
 
-    const res = await fetch("/reserve", {
+    if (!date || !selectedSlot || !name || !phone || !email) {
+        alert("Compila tutti i campi e seleziona uno slot");
+        return;
+    }
+
+    // 1. Prenota lo slot sul server
+    let res = await fetch("/reserve", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, time: selectedSlot, name, phone, email })
     });
-    const data = await res.json();
+
+    let data = await res.json();
     if (data.error) { alert(data.error); return; }
     bookingId = data.booking_id;
 
-    const paymentRes = await fetch("/create-payment-intent", {
+    // 2. Crea PaymentIntent
+    res = await fetch("/create-payment-intent", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ booking_id: bookingId })
     });
-    const paymentData = await paymentRes.json();
-    if (paymentData.error) { alert(paymentData.error); return; }
+    data = await res.json();
+    if (data.error) { alert(data.error); return; }
 
-    const result = await stripe.confirmPayment({
-        clientSecret: paymentData.client_secret,
-        confirmParams: { return_url: window.location.origin }
+    // 3. Conferma pagamento Stripe
+    const { error } = await stripe.confirmPayment({
+        clientSecret: data.client_secret,
+        confirmParams: { return_url: window.location.origin + "/" }
     });
-    if (result.error) { alert(result.error.message); }
+
+    if (error) { alert(error.message); }
 });
 </script>
 </body>
 </html>
+
