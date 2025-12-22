@@ -1,114 +1,122 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prenotazione Campo Tennis</title>
-<style>
-body { font-family: Arial, sans-serif; margin:20px; }
-button { margin:5px; padding:10px; cursor:pointer; }
-#slots button.selected { background-color: #4CAF50; color:white; }
-</style>
+    <meta charset="UTF-8">
+    <title>Prenotazione Campo Tennis</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        button { padding: 10px; margin: 5px; cursor: pointer; }
+        .slot { margin: 5px 0; }
+    </style>
 </head>
 <body>
 
-<h1>Prenotazione Campo Tennis</h1>
+<h1>Prenota il campo da tennis</h1>
 
-<label>Seleziona Data: <input type="date" id="date"></label><br><br>
+<label>Data:</label>
+<input type="date" id="date" onchange="loadSlots()">
 
-<div id="slots">Seleziona una data per vedere gli slot disponibili</div>
+<div id="slots"></div>
 
-<br>
-<label>Nome: <input type="text" id="name"></label><br>
-<label>Telefono: <input type="text" id="phone"></label><br>
-<label>Email: <input type="email" id="email"></label><br><br>
+<hr>
 
-<button onclick="start()">Paga caparra 10€</button>
+<h2>Dati prenotazione</h2>
+<input type="text" id="name" placeholder="Nome"><br>
+<input type="text" id="phone" placeholder="Telefono"><br>
+<input type="email" id="email" placeholder="Email"><br>
+
+<button onclick="prenota()">Prenota</button>
 
 <script>
-let selectedTime = null;
-const slotsDiv = document.getElementById("slots");
-const dateInput = document.getElementById("date");
-const nameInput = document.getElementById("name");
-const phoneInput = document.getElementById("phone");
-const emailInput = document.getElementById("email");
+const stripe = Stripe("{{ STRIPE_PUBLISHABLE_KEY }}");
+let selectedSlot = null;
+let bookingId = null;
 
-function generateSlots() {
-    const date = dateInput.value;
-    if(!date){
-        slotsDiv.innerText = "Seleziona prima una data";
+async function loadSlots() {
+    const date = document.getElementById("date").value;
+    if (!date) return;
+
+    const res = await fetch(`/slots?date=${date}`);
+    const slots = await res.json();
+
+    const container = document.getElementById("slots");
+    container.innerHTML = "<h3>Slot disponibili</h3>";
+
+    if (slots.length === 0) {
+        container.innerHTML += "<p>Nessuno slot disponibile</p>";
         return;
     }
 
-    fetch(`/slots?date=${date}`)
-    .then(r=>r.json())
-    .then(slots=>{
-        slotsDiv.innerHTML = "";
-        if(slots.length===0){
-            slotsDiv.innerText = "Nessuno slot disponibile per questa data.";
-            return;
-        }
-        slots.forEach(h=>{
-            let b = document.createElement("button");
-            b.innerText = h;
-            b.onclick = ()=>{
-                selectedTime = h;
-                document.querySelectorAll("#slots button").forEach(btn=>btn.classList.remove("selected"));
-                b.classList.add("selected");
-            };
-            slotsDiv.appendChild(b);
-        });
-    })
-    .catch(err=>{
-        slotsDiv.innerText = "Errore nel caricare gli slot.";
-        console.error(err);
+    slots.forEach(slot => {
+        const btn = document.createElement("button");
+        btn.innerText = slot;
+        btn.onclick = () => {
+            selectedSlot = slot;
+            alert("Slot selezionato: " + slot);
+        };
+        container.appendChild(btn);
     });
 }
 
-dateInput.addEventListener("change", generateSlots);
+async function prenota() {
+    const date = document.getElementById("date").value;
+    const name = document.getElementById("name").value;
+    const phone = document.getElementById("phone").value;
+    const email = document.getElementById("email").value;
 
-function start(){
-    if(!selectedTime){
-        alert("Seleziona prima uno slot!");
+    if (!date || !selectedSlot || !name || !phone || !email) {
+        alert("Compila tutti i campi e seleziona uno slot");
         return;
     }
-    if(!nameInput.value || !phoneInput.value || !emailInput.value){
-        alert("Compila tutti i campi!");
+
+    const res = await fetch("/reserve", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            date: date,
+            time: selectedSlot,
+            name: name,
+            phone: phone,
+            email: email
+        })
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+        alert(data.error);
         return;
     }
 
-    const dataToSend = {
-        date: dateInput.value,
-        time: selectedTime,
-        name: nameInput.value,
-        phone: phoneInput.value,
-        email: emailInput.value
-    };
+    bookingId = data.booking_id;
+    pagaCaparra();
+}
 
-    fetch("/reserve", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(dataToSend)
-    })
-    .then(r => r.json())
-    .then(d => {
-        if(d.error){
-            alert(d.error);
-            generateSlots();
-            return;
+async function pagaCaparra() {
+    const res = await fetch("/create-payment-intent", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ booking_id: bookingId })
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+        alert(data.error);
+        return;
+    }
+
+    const result = await stripe.confirmPayment({
+        clientSecret: data.client_secret,
+        confirmParams: {
+            return_url: window.location.origin
         }
-        fetch("/webhook", {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({booking_id: d.booking_id})
-        })
-        .then(()=> {
-            alert("Prenotazione e pagamento simulati!");
-            generateSlots();
-        })
-        .catch(err => alert("Errore nel simulare pagamento: " + err));
-    })
-    .catch(err => alert("Errore nella prenotazione: " + err));
+    });
+
+    if (result.error) {
+        alert(result.error.message);
+    }
 }
 </script>
 
