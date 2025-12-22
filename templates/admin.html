@@ -4,45 +4,42 @@
 <meta charset="UTF-8">
 <title>Admin Prenotazioni</title>
 <style>
-body { font-family: Arial, sans-serif; margin: 40px; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-th { background-color: #f2f2f2; }
-button { padding: 6px 12px; cursor: pointer; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+button { padding: 5px 10px; }
 </style>
 </head>
 <body>
-<h1>Admin - Prenotazioni Campo Tennis</h1>
-<table>
-<thead>
+<h1>Admin Prenotazioni</h1>
+<table id="bookings">
 <tr>
-<th>ID</th><th>Data</th><th>Orario</th><th>Nome</th><th>Telefono</th><th>Email</th><th>Pagato</th><th>Azione</th>
+<th>ID</th><th>Data</th><th>Ora</th><th>Nome</th><th>Telefono</th><th>Email</th><th>Pagato</th><th>Azione</th>
 </tr>
-</thead>
-<tbody id="bookingsTable"></tbody>
 </table>
 
 <script>
 async function loadBookings() {
     const res = await fetch("/admin/bookings");
     const data = await res.json();
-    const tbody = document.getElementById("bookingsTable");
-    tbody.innerHTML = "";
+    const table = document.getElementById("bookings");
+    table.innerHTML = `<tr>
+<th>ID</th><th>Data</th><th>Ora</th><th>Nome</th><th>Telefono</th><th>Email</th><th>Pagato</th><th>Azione</th>
+</tr>`;
     data.forEach(b => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${b.id}</td><td>${b.date}</td><td>${b.time}</td><td>${b.name}</td><td>${b.phone}</td><td>${b.email}</td><td>${b.paid ? "Sì" : "No"}</td><td><button onclick="deleteBooking(${b.id})">Cancella</button></td>`;
-        tbody.appendChild(tr);
+        tr.innerHTML = `<td>${b.id}</td><td>${b.date}</td><td>${b.time}</td><td>${b.name}</td>
+<td>${b.phone}</td><td>${b.email}</td><td>${b.paid ? "Sì" : "No"}</td>
+<td><button onclick="deleteBooking(${b.id})">Cancella</button></td>`;
+        table.appendChild(tr);
     });
 }
 
 async function deleteBooking(id) {
-    if (!confirm("Vuoi davvero cancellare questa prenotazione?")) return;
     await fetch(`/admin/delete/${id}`, { method: "POST" });
     loadBookings();
 }
 
-window.onload = loadBookings;
+loadBookings();
 </script>
 </body>
 </html>
-

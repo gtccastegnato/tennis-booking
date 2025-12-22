@@ -5,8 +5,8 @@ import stripe
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-
 DATABASE = "bookings.db"
+
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
 def get_db():
@@ -50,8 +50,6 @@ def get_slots():
         return jsonify([])
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-
-    # Limite prenotazioni 1 aprile - 31 luglio 2026
     inizio = datetime(2026, 4, 1)
     fine = datetime(2026, 7, 31)
     if date_obj < inizio or date_obj > fine:
@@ -62,10 +60,10 @@ def get_slots():
     slots = []
     if weekday < 5:
         start = datetime.combine(date_obj, datetime.strptime("17:30", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("20:30", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("19:30", "%H:%M").time())
     else:
         start = datetime.combine(date_obj, datetime.strptime("09:00", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("17:00", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("16:00", "%H:%M").time())
 
     current = start
     while current < end:
@@ -98,7 +96,6 @@ def reserve():
     if not all([date, time, name, phone, email]):
         return jsonify({"error": "Compila tutti i campi"}), 400
 
-    # Limite prenotazioni 1 aprile - 31 luglio 2026
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     if date_obj < datetime(2026, 4, 1) or date_obj > datetime(2026, 7, 31):
         return jsonify({"error": "Prenotazioni disponibili solo dal 01/04/2026 al 31/07/2026"}), 400
@@ -125,7 +122,7 @@ def create_payment_intent():
         return jsonify({"error": "booking_id mancante"}), 400
 
     intent = stripe.PaymentIntent.create(
-        amount=1000,  # 10 euro
+        amount=1000,
         currency="eur",
         automatic_payment_methods={"enabled": True},
         metadata={"booking_id": booking_id}
@@ -152,7 +149,6 @@ def stripe_webhook():
             cur.execute("UPDATE bookings SET paid=1, reserved_until=NULL WHERE id=?", (booking_id,))
             db.commit()
             db.close()
-
     return "", 200
 
 if __name__ == "__main__":
