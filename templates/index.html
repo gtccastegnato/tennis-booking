@@ -10,7 +10,6 @@ body { font-family: Arial, sans-serif; margin: 40px; }
 button.slot { padding: 12px 20px; cursor: pointer; border: 1px solid #333; border-radius: 6px; background-color: #f1f1f1; transition: 0.2s; }
 button.slot:hover { background-color: #ddd; }
 button.slot.selected { background-color: #4CAF50; color: white; border: 1px solid #4CAF50; }
-@media (max-width: 600px) { .slots-container { flex-direction: column; } button.slot { width: 100%; } }
 input, button { margin-top: 5px; margin-bottom: 10px; padding: 8px; font-size: 16px; }
 </style>
 </head>
@@ -27,7 +26,9 @@ input, button { margin-top: 5px; margin-bottom: 10px; padding: 8px; font-size: 1
 <button id="prenotaBtn">Prenota e Paga Caparra</button>
 
 <script>
-const stripe = Stripe("{{ STRIPE_PUBLISHABLE_KEY }}");
+// Qui inserisci la tua chiave pubblicabile Stripe direttamente per test
+const stripe = Stripe("pk_live_51Sh4c2Aj31ALy8XxIQ1GMQ07qH7TKU5b735sUMt3lRMoIgtcyFoSa0c01ctXg8eLePUHJstqVVPFcWai36piUkTG003YykMUyh");
+
 let selectedSlot = null;
 let bookingId = null;
 
@@ -65,35 +66,36 @@ document.getElementById("prenotaBtn").addEventListener("click", async () => {
         return;
     }
 
-    // 1. Prenota lo slot sul server
-    let res = await fetch("/reserve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, time: selectedSlot, name, phone, email })
-    });
+    try {
+        // 1. Prenota lo slot sul server
+        const res = await fetch("/reserve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date, time: selectedSlot, name, phone, email })
+        });
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        bookingId = data.booking_id;
 
-    let data = await res.json();
-    if (data.error) { alert(data.error); return; }
-    bookingId = data.booking_id;
+        // 2. Crea PaymentIntent
+        const paymentRes = await fetch("/create-payment-intent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ booking_id: bookingId })
+        });
+        const paymentData = await paymentRes.json();
+        if (paymentData.error) { alert(paymentData.error); return; }
 
-    // 2. Crea PaymentIntent
-    res = await fetch("/create-payment-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id: bookingId })
-    });
-    data = await res.json();
-    if (data.error) { alert(data.error); return; }
-
-    // 3. Conferma pagamento Stripe
-    const { error } = await stripe.confirmPayment({
-        clientSecret: data.client_secret,
-        confirmParams: { return_url: window.location.origin + "/" }
-    });
-
-    if (error) { alert(error.message); }
+        // 3. Apri checkout Stripe
+        const { error } = await stripe.confirmPayment({
+            clientSecret: paymentData.client_secret,
+            confirmParams: { return_url: window.location.href }
+        });
+        if (error) { alert(error.message); }
+    } catch (err) {
+        alert("Errore nel server: " + err.message);
+    }
 });
 </script>
 </body>
 </html>
-
