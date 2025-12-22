@@ -6,22 +6,44 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-# Stripe
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
-
 DATABASE = "bookings.db"
+
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
 def get_db():
     db = sqlite3.connect(DATABASE)
     db.row_factory = sqlite3.Row
     return db
 
-# ROUTE INDEX
+# --- INDEX ---
 @app.route("/")
 def index():
     return render_template("index.html", STRIPE_PUBLISHABLE_KEY=os.environ.get("STRIPE_PUBLISHABLE_KEY"))
 
-# ROUTE SLOT
+# --- ADMIN ---
+@app.route("/admin")
+def admin():
+    return render_template("admin.html")
+
+@app.route("/admin/bookings")
+def admin_bookings():
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bookings")
+    rows = [dict(row) for row in cur.fetchall()]
+    db.close()
+    return jsonify(rows)
+
+@app.route("/admin/delete/<int:booking_id>", methods=["POST"])
+def admin_delete(booking_id):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+    db.commit()
+    db.close()
+    return '', 200
+
+# --- SLOT DISPONIBILI ---
 @app.route("/slots")
 def get_slots():
     date_str = request.args.get("date")
@@ -31,21 +53,21 @@ def get_slots():
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     weekday = date_obj.weekday()  # 0=lunedì, 6=domenica
 
-    # Slot: lun-ven 17:30-19:30, sab-dom 9-16
+    # Slot: lun-ven 17:30-19:30, sab-dom 09:00-16:00
     slots = []
     if weekday < 5:
         start = datetime.combine(date_obj, datetime.strptime("17:30", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("20:30", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("19:30", "%H:%M").time())
     else:
         start = datetime.combine(date_obj, datetime.strptime("09:00", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("17:00", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("16:00", "%H:%M").time())
 
     current = start
     while current < end:
         slots.append(current.strftime("%H:%M"))
         current += timedelta(minutes=60)
 
-    # Rimuovi slot già prenotati o riservati
+    # Rimuovi slot scaduti/reservati
     db = get_db()
     cur = db.cursor()
     now = datetime.now()
@@ -59,7 +81,7 @@ def get_slots():
     available = [s for s in slots if s not in booked]
     return jsonify(available)
 
-# ROUTE PRENOTA
+# --- PRENOTAZIONE ---
 @app.route("/reserve", methods=["POST"])
 def reserve():
     data = request.json
@@ -85,7 +107,7 @@ def reserve():
 
     return jsonify({"booking_id": booking_id})
 
-# ROUTE CREAZIONE PAYMENT INTENT
+# --- STRIPE PAYMENT ---
 @app.route("/create-payment-intent", methods=["POST"])
 def create_payment_intent():
     data = request.json
@@ -94,14 +116,13 @@ def create_payment_intent():
         return jsonify({"error": "booking_id mancante"}), 400
 
     intent = stripe.PaymentIntent.create(
-        amount=1000,  # 10 euro
+        amount=1000,  # 10 euro in centesimi
         currency="eur",
         automatic_payment_methods={"enabled": True},
         metadata={"booking_id": booking_id}
     )
     return jsonify({"client_secret": intent.client_secret})
 
-# WEBHOOK STRIPE
 @app.route("/webhook", methods=["POST"])
 def stripe_webhook():
     payload = request.data
@@ -127,5 +148,3 @@ def stripe_webhook():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
