@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 
 DATABASE = "bookings.db"
-
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
 def get_db():
@@ -29,7 +28,7 @@ def admin():
 def admin_bookings():
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT * FROM bookings")
+    cur.execute("SELECT * FROM bookings ORDER BY date, time")
     rows = [dict(row) for row in cur.fetchall()]
     db.close()
     return jsonify(rows)
@@ -53,7 +52,6 @@ def get_slots():
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     weekday = date_obj.weekday()  # 0=lunedì, 6=domenica
 
-    # Slot: lun-ven 17:30-19:30, sab-dom 09:00-16:00
     slots = []
     if weekday < 5:
         start = datetime.combine(date_obj, datetime.strptime("17:30", "%H:%M").time())
@@ -67,7 +65,6 @@ def get_slots():
         slots.append(current.strftime("%H:%M"))
         current += timedelta(minutes=60)
 
-    # Rimuovi slot scaduti/reservati
     db = get_db()
     cur = db.cursor()
     now = datetime.now()
@@ -116,7 +113,7 @@ def create_payment_intent():
         return jsonify({"error": "booking_id mancante"}), 400
 
     intent = stripe.PaymentIntent.create(
-        amount=1000,  # 10 euro in centesimi
+        amount=1000,  # 10 euro
         currency="eur",
         automatic_payment_methods={"enabled": True},
         metadata={"booking_id": booking_id}
