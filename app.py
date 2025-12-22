@@ -1,15 +1,13 @@
 
-
+from flask import Flask, render_template, request, jsonify
+import sqlite3
+import smtplib
+import time
 import os
 import stripe
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
-
-from flask import Flask, render_template, request, jsonify
-import sqlite3
-import smtplib
-import time
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -152,20 +150,33 @@ def get_slots():
 # Webhook simulato pagamento
 # --------------------------
 @app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-    booking_id = data.get("booking_id")
-    if booking_id:
-        db = get_db()
-        cur = db.cursor()
-        cur.execute("UPDATE bookings SET paid=1, reserved_until=NULL WHERE id=?", (booking_id,))
-        db.commit()
-        cur.execute("SELECT email,date,time FROM bookings WHERE id=?", (booking_id,))
-        row = cur.fetchone()
-        if row:
-            email, date, time_slot = row
-            send_email(email, date, time_slot)
-        db.close()
+def stripe_webhook():
+    payload = request.data
+    sig_header = request.headers.get("Stripe-Signature")
+
+    endpoint_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except Exception as e:
+        return str(e), 400
+
+    if event["type"] == "payment_intent.succeeded":
+        intent = event["data"]["object"]
+        booking_id = intent["metadata"].get("booking_id")
+
+        if booking_id:
+            db = get_db()
+            cur = db.cursor()
+            cur.execute(
+                "UPDATE bookings SET paid=1, reserved_until=NULL WHERE id=?",
+                (booking_id,)
+            )
+            db.commit()
+            db.close()
+
     return "", 200
 
 # --------------------------
@@ -210,3 +221,23 @@ def send_email(to_email, date, time_slot):
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)
+
+@app.route("/create-payment-intent", methods=["POST"])
+def create_payment_intent():
+    data = request.json
+    booking_id = data.get("booking_id")
+
+    if not booking_id:
+        return jsonify({"error": "booking_id mancante"}), 400
+
+    intent = stripe.PaymentIntent.create(
+        amount=1000,  # 10 euro = 1000 centesimi
+        currency="eur",
+        automatic_payment_methods={"enabled": True},
+        metadata={"booking_id": booking_id}
+    )
+
+    return jsonify({
+        "client_secret": intent.client_secret
+    })
+
