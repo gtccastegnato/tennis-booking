@@ -62,10 +62,10 @@ def get_slots():
     slots = []
     if weekday < 5:
         start = datetime.combine(date_obj, datetime.strptime("17:30", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("19:30", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("20:30", "%H:%M").time())
     else:
         start = datetime.combine(date_obj, datetime.strptime("09:00", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("16:00", "%H:%M").time())
+        end = datetime.combine(date_obj, datetime.strptime("17:00", "%H:%M").time())
 
     current = start
     while current < end:
