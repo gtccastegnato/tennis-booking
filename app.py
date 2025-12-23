@@ -14,79 +14,79 @@ def get_db():
     db.row_factory = sqlite3.Row
     return db
 
-# --- INDEX ---
+# ======================
+# INDEX
+# ======================
 @app.route("/")
 def index():
-    return render_template("index.html", STRIPE_PUBLISHABLE_KEY=os.environ.get("STRIPE_PUBLISHABLE_KEY"))
+    return render_template(
+        "index.html",
+        STRIPE_PUBLISHABLE_KEY=os.environ.get("STRIPE_PUBLISHABLE_KEY")
+    )
 
-# --- ADMIN ---
-@app.route("/admin")
-def admin():
-    return render_template("admin.html")
-
-@app.route("/admin/bookings")
-def admin_bookings():
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT * FROM bookings ORDER BY date, time")
-    rows = [dict(row) for row in cur.fetchall()]
-    db.close()
-    return jsonify(rows)
-
-@app.route("/admin/delete/<int:booking_id>", methods=["POST"])
-def admin_delete(booking_id):
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
-    db.commit()
-    db.close()
-    return '', 200
-
-# --- SLOT DISPONIBILI ---
+# ======================
+# SLOT DISPONIBILI
+# ======================
 @app.route("/slots")
-def get_slots():
+def slots():
     date_str = request.args.get("date")
     if not date_str:
         return jsonify([])
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    inizio = datetime(2026, 4, 1)
-    fine = datetime(2026, 7, 31)
-    if date_obj < inizio or date_obj > fine:
+
+    # Limite date
+    if not (datetime(2026, 4, 1) <= date_obj <= datetime(2026, 7, 31)):
         return jsonify([])
 
-    weekday = date_obj.weekday()  # 0=lunedì, 6=domenica
+    weekday = date_obj.weekday()  # 0 lunedì
+
+    if weekday < 5:
+        start_h, end_h = "17:30", "20:30"
+    else:
+        start_h, end_h = "09:00", "17:00"
 
     slots = []
-    if weekday < 5:
-        start = datetime.combine(date_obj, datetime.strptime("17:30", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("19:30", "%H:%M").time())
-    else:
-        start = datetime.combine(date_obj, datetime.strptime("09:00", "%H:%M").time())
-        end = datetime.combine(date_obj, datetime.strptime("16:00", "%H:%M").time())
+    t = datetime.combine(date_obj, datetime.strptime(start_h, "%H:%M").time())
+    end_t = datetime.combine(date_obj, datetime.strptime(end_h, "%H:%M").time())
 
-    current = start
-    while current < end:
-        slots.append(current.strftime("%H:%M"))
-        current += timedelta(minutes=60)
+    while t < end_t:
+        slots.append(t.strftime("%H:%M"))
+        t += timedelta(minutes=60)
 
     db = get_db()
     cur = db.cursor()
     now = datetime.now()
-    cur.execute("UPDATE bookings SET reserved_until=NULL WHERE reserved_until IS NOT NULL AND reserved_until<? AND paid=0", (now,))
+
+    # libera slot scaduti
+    cur.execute("""
+        UPDATE bookings
+        SET reserved_until = NULL
+        WHERE reserved_until IS NOT NULL
+        AND reserved_until < ?
+        AND paid = 0
+    """, (now,))
     db.commit()
 
-    cur.execute("SELECT time FROM bookings WHERE date=? AND (paid=1 OR reserved_until>?)", (date_str, now))
-    booked = [row["time"] for row in cur.fetchall()]
+    cur.execute("""
+        SELECT time FROM bookings
+        WHERE date = ?
+        AND (paid = 1 OR reserved_until > ?)
+    """, (date_str, now))
+
+    booked = [r["time"] for r in cur.fetchall()]
     db.close()
 
     available = [s for s in slots if s not in booked]
     return jsonify(available)
 
-# --- PRENOTAZIONE ---
+# ======================
+# PRENOTAZIONE
+# ======================
 @app.route("/reserve", methods=["POST"])
 def reserve():
     data = request.json
+
     date = data.get("date")
     time = data.get("time")
     name = data.get("name")
@@ -94,46 +94,40 @@ def reserve():
     email = data.get("email")
 
     if not all([date, time, name, phone, email]):
-        return jsonify({"error": "Compila tutti i campi"}), 400
-
-    date_obj = datetime.strptime(date, "%Y-%m-%d")
-    if date_obj < datetime(2026, 4, 1) or date_obj > datetime(2026, 7, 31):
-        return jsonify({"error": "Prenotazioni disponibili solo dal 01/04/2026 al 31/07/2026"}), 400
+        return jsonify({"error": "Dati mancanti"}), 400
 
     db = get_db()
     cur = db.cursor()
-    reserved_until = datetime.now() + timedelta(minutes=10)
-    cur.execute(
-        "INSERT INTO bookings (date, time, name, phone, email, paid, reserved_until) VALUES (?,?,?,?,?,?,?)",
-        (date, time, name, phone, email, 0, reserved_until)
-    )
+
+    cur.execute("""
+        INSERT INTO bookings
+        (date, time, name, phone, email, paid, reserved_until)
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+    """, (
+        date,
+        time,
+        name,
+        phone,
+        email,
+        datetime.now() + timedelta(minutes=10)
+    ))
+
     booking_id = cur.lastrowid
     db.commit()
     db.close()
 
     return jsonify({"booking_id": booking_id})
 
-# --- STRIPE PAYMENT ---
-@app.route("/create-payment-intent", methods=["POST"])
-def create_payment_intent():
+# ======================
+# STRIPE CHECKOUT
+# ======================
+@app.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
     data = request.json
     booking_id = data.get("booking_id")
 
     if not booking_id:
         return jsonify({"error": "booking_id mancante"}), 400
-
-    intent = stripe.PaymentIntent.create(
-        amount=1000,
-        currency="eur",
-        automatic_payment_methods={"enabled": True},
-        metadata={"booking_id": booking_id}
-    )
-    return jsonify({"client_secret": intent.client_secret})
-
-@app.route("/create-checkout-session", methods=["POST"])
-def create_checkout_session():
-    data = request.json
-    booking_id = data.get("booking_id")
 
     session = stripe.checkout.Session.create(
         mode="payment",
@@ -141,9 +135,7 @@ def create_checkout_session():
         line_items=[{
             "price_data": {
                 "currency": "eur",
-                "product_data": {
-                    "name": "Caparra campo tennis"
-                },
+                "product_data": {"name": "Caparra campo tennis"},
                 "unit_amount": 1000
             },
             "quantity": 1
@@ -155,28 +147,7 @@ def create_checkout_session():
 
     return jsonify({"url": session.url})
 
-
-@app.route("/webhook", methods=["POST"])
-def stripe_webhook():
-    payload = request.data
-    sig_header = request.headers.get("Stripe-Signature")
-    endpoint_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-    except Exception as e:
-        return str(e), 400
-
-    if event["type"] == "payment_intent.succeeded":
-        intent = event["data"]["object"]
-        booking_id = intent["metadata"].get("booking_id")
-        if booking_id:
-            db = get_db()
-            cur = db.cursor()
-            cur.execute("UPDATE bookings SET paid=1, reserved_until=NULL WHERE id=?", (booking_id,))
-            db.commit()
-            db.close()
-    return "", 200
-
+# ======================
 if __name__ == "__main__":
     app.run(debug=True)
+
