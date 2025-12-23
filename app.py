@@ -1,17 +1,28 @@
-from flask import session, redirect, url_for
-app.secret_key = os.environ.get("ADMIN_SECRET_KEY", "98dsf7sd98f7sd98fsd98f7sdf")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Porcodio.1994")
-
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect
 import sqlite3
 import os
 import stripe
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
+
+# ======================
+# CONFIG
+# ======================
+app.secret_key = os.environ.get(
+    "ADMIN_SECRET_KEY",
+    "98dsf7sd98f7sd98fsd98f7sdf"
+)
+
+ADMIN_PASSWORD = os.environ.get(
+    "ADMIN_PASSWORD",
+    "Porcodio.1994"
+)
+
 DATABASE = "bookings.db"
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+
 
 def get_db():
     db = sqlite3.connect(DATABASE)
@@ -177,7 +188,7 @@ def stripe_health():
 # ADMIN
 # ======================
 def admin_required():
-    return session.get("admin_logged")
+    return session.get("admin_logged") is True
 
 @app.route("/admin")
 def admin():
