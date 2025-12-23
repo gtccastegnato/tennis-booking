@@ -90,17 +90,16 @@ document.getElementById("prenotaBtn").addEventListener("click", async () => {
         const paymentData = await paymentRes.json();
         if (paymentData.error) { alert(paymentData.error); return; }
 
-        // 3. Stripe Checkout
-        const { error } = await stripe.confirmPayment({
-            clientSecret: paymentData.client_secret,
-            confirmParams: { return_url: window.location.href }
-        });
+        // 3. Checkout Stripe
+const paymentRes = await fetch("/create-checkout-session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ booking_id: bookingId })
+});
 
-        if (error) { alert(error.message); }
+const paymentData = await paymentRes.json();
+window.location.href = paymentData.url;
 
-    } catch (err) {
-        alert("Errore nel server: " + err.message);
-    }
 });
 </script>
 </body>

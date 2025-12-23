@@ -130,6 +130,32 @@ def create_payment_intent():
     )
     return jsonify({"client_secret": intent.client_secret})
 
+@app.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    data = request.json
+    booking_id = data.get("booking_id")
+
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "eur",
+                "product_data": {
+                    "name": "Caparra campo tennis"
+                },
+                "unit_amount": 1000
+            },
+            "quantity": 1
+        }],
+        success_url=request.host_url + "?success=1",
+        cancel_url=request.host_url + "?cancel=1",
+        metadata={"booking_id": booking_id}
+    )
+
+    return jsonify({"url": session.url})
+
+
 @app.route("/webhook", methods=["POST"])
 def stripe_webhook():
     payload = request.data
