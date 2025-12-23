@@ -156,11 +156,16 @@ if __name__ == "__main__":
 def stripe_health():
     try:
         account = stripe.Account.retrieve()
-        return {
+        return jsonify({
             "ok": True,
-            "charges_enabled": account["charges_enabled"],
-            "payouts_enabled": account["payouts_enabled"],
-            "details_submitted": account["details_submitted"]
-        }
+            "charges_enabled": account.get("charges_enabled"),
+            "payouts_enabled": account.get("payouts_enabled"),
+            "details_submitted": account.get("details_submitted"),
+            "country": account.get("country"),
+            "business_type": account.get("business_type")
+        })
     except Exception as e:
-        return {"ok": False, "error": str(e)}, 500
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
