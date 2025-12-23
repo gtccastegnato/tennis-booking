@@ -1,1 +1,45 @@
-<h1>Admin</h1>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Admin Prenotazioni</title>
+<style>
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+button { padding: 5px 10px; }
+</style>
+</head>
+<body>
+<h1>Admin Prenotazioni</h1>
+<table id="bookings">
+<tr>
+<th>ID</th><th>Data</th><th>Ora</th><th>Nome</th><th>Telefono</th><th>Email</th><th>Pagato</th><th>Azione</th>
+</tr>
+</table>
+
+<script>
+async function loadBookings() {
+    const res = await fetch("/admin/bookings");
+    const data = await res.json();
+    const table = document.getElementById("bookings");
+    table.innerHTML = `<tr>
+<th>ID</th><th>Data</th><th>Ora</th><th>Nome</th><th>Telefono</th><th>Email</th><th>Pagato</th><th>Azione</th>
+</tr>`;
+    data.forEach(b => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${b.id}</td><td>${b.date}</td><td>${b.time}</td><td>${b.name}</td>
+<td>${b.phone}</td><td>${b.email}</td><td>${b.paid ? "Sì" : "No"}</td>
+<td><button onclick="deleteBooking(${b.id})">Cancella</button></td>`;
+        table.appendChild(tr);
+    });
+}
+
+async function deleteBooking(id) {
+    await fetch(`/admin/delete/${id}`, { method: "POST" });
+    loadBookings();
+}
+
+loadBookings();
+</script>
+</body>
+</html>
