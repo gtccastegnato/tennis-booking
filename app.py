@@ -169,3 +169,32 @@ def stripe_health():
             "ok": False,
             "error": str(e)
         }), 500
+        # ======================
+# ADMIN
+# ======================
+@app.route("/admin")
+def admin():
+    return render_template("admin.html")
+
+@app.route("/admin/bookings")
+def admin_bookings():
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT id, date, time, name, phone, email, paid
+        FROM bookings
+        ORDER BY date, time
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    db.close()
+    return jsonify(rows)
+
+@app.route("/admin/delete/<int:booking_id>", methods=["POST"])
+def admin_delete(booking_id):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
