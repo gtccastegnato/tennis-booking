@@ -1,3 +1,7 @@
+from flask import session, redirect, url_for
+app.secret_key = os.environ.get("ADMIN_SECRET_KEY", "98dsf7sd98f7sd98fsd98f7sdf")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Porcodio.1994")
+
 from flask import Flask, render_template, request, jsonify
 import sqlite3
 import os
@@ -172,12 +176,20 @@ def stripe_health():
         # ======================
 # ADMIN
 # ======================
+def admin_required():
+    return session.get("admin_logged")
+
 @app.route("/admin")
 def admin():
+    if not admin_required():
+        return redirect("/admin-login")
     return render_template("admin.html")
 
 @app.route("/admin/bookings")
 def admin_bookings():
+    if not admin_required():
+        return jsonify({"error": "Unauthorized"}), 401
+
     db = get_db()
     cur = db.cursor()
     cur.execute("""
@@ -191,6 +203,9 @@ def admin_bookings():
 
 @app.route("/admin/delete/<int:booking_id>", methods=["POST"])
 def admin_delete(booking_id):
+    if not admin_required():
+        return jsonify({"error": "Unauthorized"}), 401
+
     db = get_db()
     cur = db.cursor()
     cur.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
@@ -198,3 +213,26 @@ def admin_delete(booking_id):
     db.close()
     return jsonify({"ok": True})
 
+
+@app.route("/admin-login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        password = request.form.get("password")
+        if password == ADMIN_PASSWORD:
+            session["admin_logged"] = True
+            return redirect("/admin")
+        else:
+            return "Password errata", 401
+
+    return """
+    <h2>Login Admin</h2>
+    <form method="post">
+        <input type="password" name="password" placeholder="Password admin">
+        <button type="submit">Entra</button>
+    </form>
+    """
+
+@app.route("/admin-logout")
+def admin_logout():
+    session.pop("admin_logged", None)
+    return redirect("/")
