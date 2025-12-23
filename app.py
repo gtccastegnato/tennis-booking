@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 DATABASE = "bookings.db"
 
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 
 def get_db():
     db = sqlite3.connect(DATABASE)
