@@ -147,7 +147,20 @@ def create_checkout_session():
 
     return jsonify({"url": session.url})
 
+
 # ======================
 if __name__ == "__main__":
     app.run(debug=True)
 
+@app.route("/stripe-health")
+def stripe_health():
+    try:
+        account = stripe.Account.retrieve()
+        return {
+            "ok": True,
+            "charges_enabled": account["charges_enabled"],
+            "payouts_enabled": account["payouts_enabled"],
+            "details_submitted": account["details_submitted"]
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
