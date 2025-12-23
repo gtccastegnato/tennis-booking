@@ -29,65 +29,94 @@ body { font-family: Arial, sans-serif; margin: 40px; }
 
 <script>
 let selectedSlot = null;
-let bookingId = null;
 
-date.addEventListener("change", async () => {
+const dateInput = document.getElementById("date");
+const slotsDiv = document.getElementById("slots");
+const payBtn = document.getElementById("pay");
+
+dateInput.addEventListener("change", async () => {
     selectedSlot = null;
-    slots.innerHTML = "";
+    slotsDiv.innerHTML = "";
 
-    const res = await fetch(`/slots?date=${date.value}`);
-    const data = await res.json();
+    try {
+        const res = await fetch(`/slots?date=${dateInput.value}`);
+        const data = await res.json();
 
-    if (data.length === 0) {
-        slots.innerHTML = "<p>Nessuno slot disponibile</p>";
-        return;
+        if (!Array.isArray(data) || data.length === 0) {
+            slotsDiv.innerHTML = "<p>Nessuno slot disponibile</p>";
+            return;
+        }
+
+        data.forEach(time => {
+            const btn = document.createElement("button");
+            btn.textContent = time;
+            btn.className = "slot";
+            btn.onclick = () => {
+                document.querySelectorAll(".slot").forEach(b => b.classList.remove("selected"));
+                btn.classList.add("selected");
+                selectedSlot = time;
+            };
+            slotsDiv.appendChild(btn);
+        });
+    } catch (e) {
+        alert("Errore caricamento slot");
+        console.error(e);
     }
-
-    data.forEach(time => {
-        const b = document.createElement("div");
-        b.className = "slot";
-        b.textContent = time;
-        b.onclick = () => {
-            document.querySelectorAll(".slot").forEach(x => x.classList.remove("selected"));
-            b.classList.add("selected");
-            selectedSlot = time;
-        };
-        slots.appendChild(b);
-    });
 });
 
-pay.onclick = async () => {
-    if (!date.value || !selectedSlot || !name.value || !phone.value || !email.value) {
-        alert("Compila tutti i campi");
+payBtn.addEventListener("click", async () => {
+    const date = dateInput.value;
+    const name = document.getElementById("name").value;
+    const phone = document.getElementById("phone").value;
+    const email = document.getElementById("email").value;
+
+    if (!date || !selectedSlot || !name || !phone || !email) {
+        alert("Compila tutti i campi e seleziona uno slot");
         return;
     }
 
-    // prenotazione
-    const r = await fetch("/reserve", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            date: date.value,
-            time: selectedSlot,
-            name: name.value,
-            phone: phone.value,
-            email: email.value
-        })
-    });
+    try {
+        // 1. RESERVE
+        const reserveRes = await fetch("/reserve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                date,
+                time: selectedSlot,
+                name,
+                phone,
+                email
+            })
+        });
 
-    const d = await r.json();
-    bookingId = d.booking_id;
+        const reserveData = await reserveRes.json();
+        if (!reserveRes.ok) {
+            alert(reserveData.error || "Errore prenotazione");
+            return;
+        }
 
-    // checkout
-    const p = await fetch("/create-checkout-session", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ booking_id: bookingId })
-    });
+        // 2. CHECKOUT
+        const checkoutRes = await fetch("/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ booking_id: reserveData.booking_id })
+        });
 
-    const s = await p.json();
-    window.location.href = s.url;
-};
+        const checkoutData = await checkoutRes.json();
+        if (!checkoutRes.ok || !checkoutData.url) {
+            alert("Errore pagamento");
+            return;
+        }
+
+        // 3. REDIRECT STRIPE
+        window.location.href = checkoutData.url;
+
+    } catch (e) {
+        alert("Errore di comunicazione col server");
+        console.error(e);
+    }
+});
 </script>
+
 </body>
 </html>
