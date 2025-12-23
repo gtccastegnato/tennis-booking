@@ -247,3 +247,41 @@ def admin_login():
 def admin_logout():
     session.pop("admin_logged", None)
     return redirect("/")
+import json
+from stripe.error import SignatureVerificationError
+
+@app.route("/stripe-webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.data
+    sig_header = request.headers.get("Stripe-Signature")
+    endpoint_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError:
+        # payload non valido
+        return "Invalid payload", 400
+    except SignatureVerificationError:
+        # firma non valida
+        return "Invalid signature", 400
+
+    # ✅ Pagamento completato
+    if event["type"] == "checkout.session.completed":
+        session_obj = event["data"]["object"]
+        booking_id = session_obj["metadata"].get("booking_id")
+
+        if booking_id:
+            db = get_db()
+            cur = db.cursor()
+            cur.execute("""
+                UPDATE bookings
+                SET paid = 1,
+                    reserved_until = NULL
+                WHERE id = ?
+            """, (booking_id,))
+            db.commit()
+            db.close()
+
+    return "", 200
